@@ -9,5 +9,5 @@ st.write("""
 Hello *world!*
 """)
  
-df = pd.read_csv("investments_VC.csv")
+df = pd.read_csv("investments_VC.csv", encoding="latin1")
 st.line_chart(df)
