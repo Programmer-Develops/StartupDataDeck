@@ -12,6 +12,7 @@ st.markdown("""
 This dashboard provides insights into startup investments based on Crunchbase data.
 Use the filters below to explore the data interactively.
 """)
+st.markdown("---")
 
 # Load data
 @st.cache_data
