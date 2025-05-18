@@ -10,10 +10,8 @@ st.set_page_config(page_title="Startup Investments Dashboard", layout="wide")
 st.title("Startup Investments Analysis Dashboard")
 st.markdown("""
 This dashboard provides insights into startup investments based on Crunchbase data.
-Use the filters below to explore the data interactively.\n\n
+Use the filters below to explore the data interactively.
 """)
-
-st.markdown("---")
 
 # Load data
 @st.cache_data
