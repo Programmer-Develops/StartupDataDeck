@@ -1,190 +1,176 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime
+import os
+
+# Set page config
+st.set_page_config(page_title="Startup Investments Dashboard", layout="wide")
+
+# Title and description
+st.title("Startup Investments Analysis Dashboard")
+st.markdown("""
+This dashboard provides insights into startup investments based on Crunchbase data.
+Use the filters below to explore the data interactively.
+""")
 
 # Load data
 @st.cache_data
 def load_data():
-    df = pd.read_csv('investments_VC.csv')
-    
-    # Clean funding amounts (remove commas and convert to float)
-    df['funding_total_usd'] = df['funding_total_usd'].str.replace(',', '').str.replace('"', '').str.strip()
-    df['funding_total_usd'] = pd.to_numeric(df['funding_total_usd'], errors='coerce')
-    
-    # Clean date columns
-    date_cols = ['founded_at', 'first_funding_at', 'last_funding_at']
-    for col in date_cols:
-        df[col] = pd.to_datetime(df[col], errors='coerce')
-    
-    # Extract year from founded date
-    df['founded_year'] = df['founded_at'].dt.year
-    
-    # Clean market column
-    df['market'] = df['market'].str.strip()
-    
-    return df
+    try:
+        # Check if file exists
+        if not os.path.exists("investments_VC.csv"):
+            raise FileNotFoundError("investments_VC.csv not found in the project directory.")
+
+        # Try loading with different encodings
+        encodings = ['utf-8', 'latin1', 'iso-8859-1']
+        for encoding in encodings:
+            try:
+                df = pd.read_csv("investments_VC.csv", encoding=encoding)
+                # Strip spaces from column names
+                df.columns = df.columns.str.strip()
+                # Verify required columns
+                required_columns = ['name', 'funding_total_usd', 'market', 'country_code', 'status']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                if missing_columns:
+                    raise ValueError(f"Missing required columns: {missing_columns}")
+
+                # Data cleaning
+                df = df.dropna(subset=['name', 'funding_total_usd', 'market'])
+                df['funding_total_usd'] = pd.to_numeric(df['funding_total_usd'].replace('[\$,]', '', regex=True), errors='coerce')
+                df = df[df['funding_total_usd'] > 0]
+                # Standardize market and category_list
+                df['market'] = df['market'].str.strip().str.lower()
+                df['category_list'] = df['category_list'].fillna('').str.split('|').apply(lambda x: [i.strip().lower() for i in x if i])
+                # Clean country_code and status
+                df['country_code'] = df['country_code'].fillna('Unknown').astype(str).str.strip()
+                df['status'] = df['status'].fillna('Unknown').astype(str).str.strip()
+                return df
+            except UnicodeDecodeError:
+                continue
+
+        # Fallback: load with error handling
+        df = pd.read_csv("investments_VC.csv", encoding='latin1', errors='ignore')
+        df.columns = df.columns.str.strip()
+        required_columns = ['name', 'funding_total_usd', 'market', 'country_code', 'status']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Missing required columns: {missing_columns}")
+
+        df = df.dropna(subset=['name', 'funding_total_usd', 'market'])
+        df['funding_total_usd'] = pd.to_numeric(df['funding_total_usd'].replace('[\$,]', '', regex=True), errors='coerce')
+        df = df[df['funding_total_usd'] > 0]
+        df['market'] = df['market'].str.strip().str.lower()
+        df['category_list'] = df['category_list'].fillna('').str.split('|').apply(lambda x: [i.strip().lower() for i in x if i])
+        df['country_code'] = df['country_code'].fillna('Unknown').astype(str).str.strip()
+        df['status'] = df['status'].fillna('Unknown').astype(str).str.strip()
+        return df
+
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return pd.DataFrame()
 
 df = load_data()
 
-# Dashboard title
-st.title('Venture Capital Investments Dashboard')
-st.markdown("""
-This dashboard provides insights into venture capital investments from the dataset.
-Explore the data using the filters and visualizations below.
-""")
+if df.empty:
+    st.markdown("""
+    **No data loaded.** Please check the following:
+    - Ensure `investments_VC.csv` is in the same directory as `app.py`.
+    - Verify the file is not corrupted (open it in a text editor or Excel).
+    - Confirm the dataset contains columns: `name`, `funding_total_usd`, `market`, `country_code`, `status`.
+    - Check column names:
+      ```python
+      import pandas as pd
+      df = pd.read_csv("investments_VC.csv", encoding='latin1')
+      print(df.columns.tolist())
+      ```
+    - If encoding issues persist, convert to UTF-8:
+      ```python
+      import pandas as pd
+      df = pd.read_csv("investments_VC.csv", encoding='latin1')
+      df.to_csv("investments_VC_utf8.csv", encoding='utf-8', index=False)
+      ```
+    """)
+    st.stop()
 
 # Sidebar filters
-st.sidebar.header('Filters')
+st.sidebar.header("Filters")
+markets = st.sidebar.multiselect("Select Markets", options=sorted(df['market'].unique()), default=df['market'].unique()[:3])
+countries = st.sidebar.multiselect("Select Countries", options=sorted(df['country_code'].unique()), default=['USA', 'CHN', 'GBR'])
+min_funding = float(df['funding_total_usd'].min())
+max_funding = float(df['funding_total_usd'].max())
+funding_range = st.sidebar.slider("Select Funding Range (USD)", min_funding, max_funding, (min_funding, max_funding/10))
+statuses = st.sidebar.multiselect("Select Status", options=sorted(df['status'].unique()), default=df['status'].unique())
 
-# Market filter
-market_list = ['All'] + sorted(df['market'].dropna().unique().tolist())
-selected_market = st.sidebar.selectbox('Select Market', market_list)
-
-# Status filter
-status_list = ['All'] + sorted(df['status'].dropna().unique().tolist())
-selected_status = st.sidebar.selectbox('Select Status', status_list)
-
-# Country filter
-country_list = ['All'] + sorted(df['country_code'].dropna().unique().tolist())
-selected_country = st.sidebar.selectbox('Select Country', country_list)
-
-# Year range filter
-min_year = int(df['founded_year'].min())
-max_year = int(df['founded_year'].max())
-year_range = st.sidebar.slider(
-    'Select Founded Year Range',
-    min_year, max_year, (min_year, max_year)
-)
-
-# Apply filters
-filtered_df = df.copy()
-if selected_market != 'All':
-    filtered_df = filtered_df[filtered_df['market'] == selected_market]
-if selected_status != 'All':
-    filtered_df = filtered_df[filtered_df['status'] == selected_status]
-if selected_country != 'All':
-    filtered_df = filtered_df[filtered_df['country_code'] == selected_country]
-filtered_df = filtered_df[
-    (filtered_df['founded_year'] >= year_range[0]) & 
-    (filtered_df['founded_year'] <= year_range[1])
+# Filter data
+filtered_df = df[
+    (df['market'].isin(markets)) &
+    (df['country_code'].isin(countries)) &
+    (df['funding_total_usd'].between(funding_range[0], funding_range[1])) &
+    (df['status'].isin(statuses))
 ]
 
-# Key metrics
-st.subheader('Key Metrics')
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total Companies", filtered_df.shape[0])
-col2.metric("Total Funding (USD)", f"${filtered_df['funding_total_usd'].sum():,.0f}")
-col3.metric("Average Funding (USD)", f"${filtered_df['funding_total_usd'].mean():,.0f}")
-col4.metric("Median Funding (USD)", f"${filtered_df['funding_total_usd'].median():,.0f}")
+# Layout
+col1, col2 = st.columns(2)
 
-# Top markets by funding
-st.subheader('Top Markets by Total Funding')
-market_funding = filtered_df.groupby('market')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
-fig1 = px.bar(
-    market_funding, 
-    x=market_funding.values, 
-    y=market_funding.index,
-    orientation='h',
-    labels={'x': 'Total Funding (USD)', 'y': 'Market'},
-    title='Top 10 Markets by Total Funding'
-)
-st.plotly_chart(fig1, use_container_width=True)
+# Insight 1: Top Markets by Funding
+with col1:
+    st.subheader("Top Markets by Total Funding")
+    market_funding = filtered_df.groupby('market')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
+    fig1 = px.bar(x=market_funding.values, y=market_funding.index, orientation='h', title="Top 10 Markets by Funding")
+    fig1.update_layout(xaxis_title="Total Funding (USD)", yaxis_title="Market")
+    st.plotly_chart(fig1, use_container_width=True)
 
-# Funding over time
-st.subheader('Funding Over Time')
-time_group = st.radio(
-    "Group by:",
-    ('Year', 'Quarter'),
-    horizontal=True
-)
+# Insight 2: Top Countries by Number of Startups
+with col2:
+    st.subheader("Top Countries by Number of Startups")
+    country_counts = filtered_df['country_code'].value_counts().head(10)
+    fig2 = px.pie(values=country_counts.values, names=country_counts.index, title="Top 10 Countries")
+    st.plotly_chart(fig2, use_container_width=True)
 
-if time_group == 'Year':
-    funding_over_time = filtered_df.groupby(filtered_df['founded_at'].dt.year)['funding_total_usd'].sum().reset_index()
-    funding_over_time.columns = ['Year', 'Total Funding']
-    fig2 = px.line(
-        funding_over_time, 
-        x='Year', 
-        y='Total Funding',
-        title='Total Funding by Founding Year'
-    )
-else:
-    filtered_df['founded_quarter'] = filtered_df['founded_at'].dt.to_period('Q').astype(str)
-    funding_over_time = filtered_df.groupby('founded_quarter')['funding_total_usd'].sum().reset_index()
-    funding_over_time.columns = ['Quarter', 'Total Funding']
-    fig2 = px.line(
-        funding_over_time, 
-        x='Quarter', 
-        y='Total Funding',
-        title='Total Funding by Founding Quarter'
-    )
-st.plotly_chart(fig2, use_container_width=True)
-
-# Status distribution
-st.subheader('Company Status Distribution')
-status_counts = filtered_df['status'].value_counts()
-fig3 = px.pie(
-    status_counts,
-    values=status_counts.values,
-    names=status_counts.index,
-    title='Company Status Distribution'
-)
+# Insight 3: Funding by Status
+st.subheader("Funding by Startup Status")
+status_funding = filtered_df.groupby('status')['funding_total_usd'].sum()
+fig3 = px.bar(x=status_funding.index, y=status_funding.values, title="Total Funding by Status")
+fig3.update_layout(xaxis_title="Status", yaxis_title="Total Funding (USD)")
 st.plotly_chart(fig3, use_container_width=True)
 
-# Top countries by funding
-st.subheader('Top Countries by Total Funding')
-country_funding = filtered_df.groupby('country_code')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
-fig4 = px.bar(
-    country_funding, 
-    x=country_funding.values, 
-    y=country_funding.index,
-    orientation='h',
-    labels={'x': 'Total Funding (USD)', 'y': 'Country Code'},
-    title='Top 10 Countries by Total Funding'
-)
-st.plotly_chart(fig4, use_container_width=True)
+# Insight 4: Top Regions by Funding
+with col1:
+    st.subheader("Top Regions by Funding")
+    region_funding = filtered_df.groupby('region')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
+    fig4 = px.bar(x=region_funding.index, y=region_funding.values, title="Top 10 Regions by Funding")
+    fig4.update_layout(xaxis_title="Region", yaxis_title="Total Funding (USD)")
+    st.plotly_chart(fig4, use_container_width=True)
 
-# Funding by round type
-st.subheader('Funding by Round Type')
-round_types = ['seed', 'venture', 'equity_crowdfunding', 'undisclosed', 
-               'convertible_note', 'debt_financing', 'angel', 'grant', 
-               'private_equity', 'post_ipo_equity']
-round_funding = filtered_df[round_types].sum().sort_values(ascending=False)
-fig5 = px.bar(
-    round_funding,
-    x=round_funding.values,
-    y=round_funding.index,
-    orientation='h',
-    labels={'x': 'Total Funding (USD)', 'y': 'Round Type'},
-    title='Total Funding by Round Type'
-)
-st.plotly_chart(fig5, use_container_width=True)
+# Insight 5: Most Funded Startups
+with col2:
+    st.subheader("Most Funded Startups")
+    top_startups = filtered_df.groupby('name')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
+    fig5 = px.bar(x=top_startups.index, y=top_startups.values, title="Top 10 Funded Startups")
+    fig5.update_layout(xaxis_title="Startup", yaxis_title="Total Funding (USD)")
+    st.plotly_chart(fig5, use_container_width=True)
 
-# Top funded companies
-st.subheader('Top 10 Funded Companies')
-top_companies = filtered_df.nlargest(10, 'funding_total_usd')[['name', 'market', 'country_code', 'funding_total_usd']]
-top_companies = top_companies.sort_values('funding_total_usd', ascending=True)
-fig6 = px.bar(
-    top_companies,
-    x='funding_total_usd',
-    y='name',
-    orientation='h',
-    color='market',
-    labels={'x': 'Total Funding (USD)', 'y': 'Company Name'},
-    title='Top 10 Companies by Funding Amount'
-)
+# Insight 6: Funding by Market
+st.subheader("Funding Distribution by Market")
+market_dist = filtered_df.groupby('market')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
+fig6 = px.pie(values=market_dist.values, names=market_dist.index, title="Funding Distribution by Market")
 st.plotly_chart(fig6, use_container_width=True)
 
-# Data table
-st.subheader('Investment Data')
-st.dataframe(filtered_df.sort_values('funding_total_usd', ascending=False), height=300)
+# Insight 7: Average Funding by Market
+with col1:
+    st.subheader("Average Funding by Market")
+    avg_market_funding = filtered_df.groupby('market')['funding_total_usd'].mean().sort_values(ascending=False).head(10)
+    fig7 = px.bar(x=avg_market_funding.index, y=avg_market_funding.values, title="Top 10 Markets by Average Funding")
+    fig7.update_layout(xaxis_title="Market", yaxis_title="Average Funding (USD)")
+    st.plotly_chart(fig7, use_container_width=True)
 
-# Download button
-st.download_button(
-    label="Download Filtered Data as CSV",
-    data=filtered_df.to_csv(index=False).encode('utf-8'),
-    file_name='vc_investments_filtered.csv',
-    mime='text/csv'
-)
+# Insight 8: Status Breakdown
+with col2:
+    st.subheader("Startup Status Breakdown")
+    status_counts = filtered_df['status'].value_counts()
+    fig8 = px.pie(values=status_counts.values, names=status_counts.index, title="Status Distribution")
+    st.plotly_chart(fig8, use_container_width=True)
+
+# Footer
+st.markdown("---")
+st.markdown("Made By Shantanu Pandya | Data Source: Crunchbase | Deployed on Streamlit Cloud")
