@@ -13,7 +13,8 @@ This dashboard provides insights into startup investments based on Crunchbase da
 Use the filters below to explore the data interactively.
 """)
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.write("")
+st.write("")
 
 # Load data
 @st.cache_data
