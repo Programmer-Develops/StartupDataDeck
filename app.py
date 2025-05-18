@@ -116,7 +116,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Top Markets by Total Funding")
     market_funding = filtered_df.groupby('market')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
-    fig1 = px.bar(x=market_funding.values, y=market_funding.index, orientation='h', title="Top 10 Markets by Funding")
+    fig1 = px.bar(x=market_funding.values, y=market_funding.index, orientation='h', title="Top Markets by Funding")
     fig1.update_layout(xaxis_title="Total Funding (USD)", yaxis_title="Market")
     st.plotly_chart(fig1, use_container_width=True)
 
@@ -124,7 +124,7 @@ with col1:
 with col2:
     st.subheader("Top Countries by Number of Startups")
     country_counts = filtered_df['country_code'].value_counts().head(10)
-    fig2 = px.pie(values=country_counts.values, names=country_counts.index, title="Top 10 Countries")
+    fig2 = px.pie(values=country_counts.values, names=country_counts.index, title="Top Countries")
     st.plotly_chart(fig2, use_container_width=True)
 
 # Insight 3: Funding by Status
@@ -138,7 +138,7 @@ st.plotly_chart(fig3, use_container_width=True)
 with col1:
     st.subheader("Top Regions by Funding")
     region_funding = filtered_df.groupby('region')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
-    fig4 = px.bar(x=region_funding.index, y=region_funding.values, title="Top 10 Regions by Funding")
+    fig4 = px.bar(x=region_funding.index, y=region_funding.values, title="Top Regions by Funding")
     fig4.update_layout(xaxis_title="Region", yaxis_title="Total Funding (USD)")
     st.plotly_chart(fig4, use_container_width=True)
 
@@ -146,7 +146,7 @@ with col1:
 with col2:
     st.subheader("Most Funded Startups")
     top_startups = filtered_df.groupby('name')['funding_total_usd'].sum().sort_values(ascending=False).head(10)
-    fig5 = px.bar(x=top_startups.index, y=top_startups.values, title="Top 10 Funded Startups")
+    fig5 = px.bar(x=top_startups.index, y=top_startups.values, title="Top Funded Startups")
     fig5.update_layout(xaxis_title="Startup", yaxis_title="Total Funding (USD)")
     st.plotly_chart(fig5, use_container_width=True)
 
@@ -160,7 +160,7 @@ st.plotly_chart(fig6, use_container_width=True)
 with col1:
     st.subheader("Average Funding by Market")
     avg_market_funding = filtered_df.groupby('market')['funding_total_usd'].mean().sort_values(ascending=False).head(10)
-    fig7 = px.bar(x=avg_market_funding.index, y=avg_market_funding.values, title="Top 10 Markets by Average Funding")
+    fig7 = px.bar(x=avg_market_funding.index, y=avg_market_funding.values, title="Top Markets by Average Funding")
     fig7.update_layout(xaxis_title="Market", yaxis_title="Average Funding (USD)")
     st.plotly_chart(fig7, use_container_width=True)
 
